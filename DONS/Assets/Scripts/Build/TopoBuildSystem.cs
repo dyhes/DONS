@@ -230,6 +230,16 @@ namespace Samples.DONSSystem
                             }
                             Debug.Log("BFS End");
                             //Debug.Log(System.DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss"));
+
+                            Debug.Log("Build OSPFTransmitter entity Begin");
+                            Entity tranmitterEntity = ecb.CreateEntity();
+                            ecb.AddBuffer<LSAPacket>(tranmitterEntity);
+                            ecb.AddComponent(tranmitterEntity, new OSPFTransmitterData
+                            {
+                                tranmittingFrame = 500
+                            });
+                            Debug.Log("Build OSPFTransmitter entity End");
+
                             Debug.Log("Build Switch entities Begin");
                             for (int i = 0; i < build.switch_node; i++)
                             {
@@ -241,7 +251,8 @@ namespace Samples.DONSSystem
                                     switch_id = node_id,
                                     host_node = build.host_node,
                                     fattree_K = build.fattree_K,
-                                    isUpdating = false
+                                    isUpdating = false,
+                                    transmitter = tranmitterEntity
                                 }) ;
                                 var routing_table = ecb.AddBuffer<RoutingEntry>(swEntity);
                                 for (int j = 0; j < build.host_node + build.switch_node; j++)
@@ -290,15 +301,6 @@ namespace Samples.DONSSystem
                                 }
                             }
                             Debug.Log("Build Switch entities End");
-
-                            Debug.Log("Build OSPFTransmitter entity Begin");
-                            Entity tranmitterEntity = ecb.CreateEntity();
-                            ecb.AddBuffer<LSAPacket>(tranmitterEntity);
-                            ecb.AddComponent(tranmitterEntity, new OSPFTransmitterData
-                            {
-                                tranmittingFrame = 500
-                            });
-                            Debug.Log("Build OSPFTransmitter entity End");
                         }
                         if (switchEntities.Length == build.switch_node && EgressPortEntities.Length == 0)
                         {

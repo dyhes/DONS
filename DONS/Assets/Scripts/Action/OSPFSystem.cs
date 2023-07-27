@@ -32,9 +32,9 @@ namespace Samples.DONSSystem {
             if (!init)
             {
                 var switchQuery = GetEntityQuery(ComponentType.ReadOnly<SwitchData>());
-                OSPFTransmitter = GetEntityQuery(ComponentType.ReadOnly<OSPFTransmitterData>()).ToEntityArray(Allocator.TempJob)[0];
-                switchEntities = switchQuery.ToEntityArray(Allocator.TempJob);
-                host_nums = switchQuery.ToComponentDataArray<SwitchData>(Allocator.TempJob)[0].host_node;
+                OSPFTransmitter = GetEntityQuery(ComponentType.ReadOnly<OSPFTransmitterData>()).ToEntityArray(Allocator.Temp)[0];
+                switchEntities = switchQuery.ToEntityArray(Allocator.Temp);
+                host_nums = switchQuery.ToComponentDataArray<SwitchData>(Allocator.Temp)[0].host_node;
                 init = true;
                 Debug.Log(String.Format("host_num: {0:d}", host_nums));
                 Debug.Log(String.Format("switch_num: {0:d}", switchEntities.Length));
@@ -78,16 +78,19 @@ namespace Samples.DONSSystem {
                     switchData.isUpdating = true;
                 }).ScheduleParallel();
             }
-            var ecb = ecbSystem.CreateCommandBuffer().AsParallelWriter();
-            for (int j = 0; j < switchEntities.Length; j++)
+            //预先读取所有RoutingTable
+            var switchEntities = GetEntityQuery(ComponentType.ReadOnly<SwitchData>()).ToEntityArray(Allocator.Temp);
+            NativeArray<DynamicBuffer<RoutingEntry>> routingTableArray = new NativeArray<DynamicBuffer<RoutingEntry>>(switchEntities.Length,Allocator.Temp);
+            for (int i = 0; i < switchEntities.Length; i++)
             {
-                var switchEntity = switchEntities[j];
-                var adjacencyEntriesBuffer = GetBuffer<AdjacencyEntry>(switchEntity);
+                routingTableArray[i] = GetBuffer<RoutingEntry>(switchEntities[i], true);
+            }
+            //预先读取所有RoutingTable结束
+            var ecb = ecbSystem.CreateCommandBuffer().AsParallelWriter();
+            Entities.ForEach((Entity SwitchEntity, int entityInQueryIndex, ref DynamicBuffer<AdjacencyEntry> adjacencyEntriesBuffer, ref DynamicBuffer<RoutingEntry> routingEntriesBuffer, ref DynamicBuffer<LSAPacket> receivedLSAPackets, ref SwitchData switchData) =>
+            {
                 var adjacencyEntries = adjacencyEntriesBuffer.AsNativeArray();
-                var routingEntriesBuffer = GetBuffer<RoutingEntry>(switchEntity);
                 var routingEntries = routingEntriesBuffer.AsNativeArray();
-                var receivedLSAPackets = GetBuffer<LSAPacket>(switchEntity);
-                var switchData = GetComponent<SwitchData>(switchEntity);
                 if (switchData.isUpdating)
                 {
                     //Debug.Log(String.Format("Switch {0:d}", switchData.switch_id));
@@ -109,11 +112,32 @@ namespace Samples.DONSSystem {
                         routingEntry.distance = 1;
                         routingEntries[id] = routingEntry;
                     }
-                    RoutingTableUpdated(switchData.switch_id, in adjacencyEntries, in routingEntries);
+                    //RoutingTableUpdated(switchData.switch_id,ref ecb, in adjacencyEntries, in routingEntries);
+                    Debug.Log(String.Format(" switch {0:d} routing_table: ", switchData.switch_id));
+                    for (int i = 0; i < routingEntries.Length; i++)
+                    {
+                        var routingEntry = routingEntries[i];
+                        if (routingEntry.isExpired) continue;
+                        Debug.Log(String.Format(" dest_id: {0:d}, next_hop: {1:d}, distance: {2:d} ", routingEntry.dest_id, routingEntry.next_hop, routingEntry.distance));
+                    }
+                    Debug.Log("-----------------------");
+                    for (int i = 0; i < adjacencyEntries.Length; i++)
+                    {
+                        var adjencency = adjacencyEntries[i];
+                        if (adjencency.type == NodeType.SWITCH)
+                        {
+                            var packet = new LSAPacket
+                            {
+                                dest_id = adjencency.node_id,
+                                source_id = switchData.switch_id,
+                                transfering_frame = 0
+                            };
+                            ecb.AppendToBuffer(entityInQueryIndex, switchData.transmitter, packet);
+                        }
+                    }
+
                     switchData.isUpdating = false;
-                    SetComponent(switchEntity, switchData);
                 }
-                //对于每个收到的包
                 if (receivedLSAPackets.Length > 0)
                 {
                     //Debug.Log("updating using received LSAPackets");
@@ -122,7 +146,7 @@ namespace Samples.DONSSystem {
                     {
                         //通过包中source_id得到对应的switchEntity并取得其RoutingTable
                         var source_id = receivedLSAPackets[i].source_id;
-                        var adjRoutingEntries = GetBuffer<RoutingEntry>(getSwitchEntityById(source_id)).AsNativeArray();
+                        var adjRoutingEntries = routingTableArray[source_id - switchData.host_node];//GetBuffer<RoutingEntry>(getSwitchEntityById(source_id), true).AsNativeArray();
                         //对比更新
                         for (int k = 0; k < adjRoutingEntries.Length; k++)
                         {
@@ -142,15 +166,38 @@ namespace Samples.DONSSystem {
                     //若发生变化则再次向外发送
                     if (isUpdated)
                     {
-                        RoutingTableUpdated(switchData.switch_id, in adjacencyEntries, in routingEntries);
+                        //RoutingTableUpdated(switchData.switch_id, ref ecb, in adjacencyEntries, in routingEntries);
+                        Debug.Log(String.Format(" switch {0:d} routing_table: ", switchData.switch_id));
+                        for (int i = 0; i < routingEntries.Length; i++)
+                        {
+                            var routingEntry = routingEntries[i];
+                            if (routingEntry.isExpired) continue;
+                            Debug.Log(String.Format(" dest_id: {0:d}, next_hop: {1:d}, distance: {2:d} ", routingEntry.dest_id, routingEntry.next_hop, routingEntry.distance));
+                        }
+                        Debug.Log("-----------------------");
+                        for (int i = 0; i < adjacencyEntries.Length; i++)
+                        {
+                            var adjencency = adjacencyEntries[i];
+                            if (adjencency.type == NodeType.SWITCH)
+                            {
+                                var packet = new LSAPacket
+                                {
+                                    dest_id = adjencency.node_id,
+                                    source_id = switchData.switch_id,
+                                    transfering_frame = 0
+                                };
+                                ecb.AppendToBuffer(entityInQueryIndex, switchData.transmitter, packet);
+                            }
+                        }
+                        //RoutingTableUpdated
                     }
                     receivedLSAPackets.Clear();
                 }
-            }
+            }).ScheduleParallel();
             ecbSystem.AddJobHandleForProducer(Dependency);
         }
 
-        void RoutingTableUpdated(int switchId, in NativeArray<AdjacencyEntry> adjacencyEntries, in NativeArray<RoutingEntry> routingEntries)
+        void RoutingTableUpdated(int switchId, ref EntityCommandBuffer.ParallelWriter ecb, in NativeArray<AdjacencyEntry> adjacencyEntries, in NativeArray<RoutingEntry> routingEntries)
         {
             LogRoutingTable(switchId, in routingEntries);
             for (int i = 0; i < adjacencyEntries.Length; i++)
@@ -158,7 +205,7 @@ namespace Samples.DONSSystem {
                 var adjencency = adjacencyEntries[i];
                 if (adjencency.type == NodeType.SWITCH)
                 {
-                    LinkStateAdvertisement(adjencency.node_id, switchId);
+                    LinkStateAdvertisement(adjencency.node_id, switchId, ref ecb);
                 }
             }
         }
@@ -175,18 +222,15 @@ namespace Samples.DONSSystem {
             Debug.Log("-----------------------");
         }
 
-        void LinkStateAdvertisement(int receiverId, int senderId)
+        void LinkStateAdvertisement(int receiverId, int senderId, ref EntityCommandBuffer.ParallelWriter ecb)
         {
-            var buf = GetBuffer<LSAPacket>(OSPFTransmitter);
-            //Debug.Log(String.Format("before link state advertisement {0:d}", buf.Length));
-            buf.Add(
-            new LSAPacket
+            var packet = new LSAPacket
             {
                 dest_id = receiverId,
                 source_id = senderId,
                 transfering_frame = 0
-            });
-            //Debug.Log(String.Format("after link state advertisement {0:d}", buf.Length));
+            };
+            ecb.AppendToBuffer<LSAPacket>(0, OSPFTransmitter, packet);
         }
     }
 }

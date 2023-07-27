@@ -56,6 +56,7 @@ namespace Samples.DONSSystem
         public int host_node;
         public int fattree_K;
         public bool isUpdating;
+        public Entity transmitter;
     }
 
     public struct QueueEntry : IBufferElementData
