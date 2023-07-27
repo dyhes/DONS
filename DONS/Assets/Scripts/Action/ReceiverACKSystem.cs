@@ -70,7 +70,7 @@ namespace Samples.DONSSystem
 
                         for(int i = 0; i < queue.Length; i++) {
                             var p = queue.ElementAt(i);
-                            if(p.l3Prot == 0xFC) { //ACK packet
+                            if(p.type == PacketType.ACK) { //ACK packet p.l3Prot == 0xFC 
                                 //Debug.Log(String.Format("recv ACK: {0:d} {1:d} {2:D} {3:d}", IngressPort.switch_id, p.flow_ID, p.seq_num, p.enqueue_time));
                                 if(p.DSCP == 44){
                                     ecb.RemoveComponent<Packet>(entityInQueryIndex, receiver.sender);
@@ -80,7 +80,7 @@ namespace Samples.DONSSystem
                                     ecb.AppendToBuffer<Packet>(entityInQueryIndex, receiver.sender, p); //enqueue
                                 }
                             }
-                            if(p.l3Prot == 0x06) { //TCP packet
+                            if(p.type == PacketType.TCP) { //TCP packet p.l3Prot == 0x06
                                 //Debug.Log(String.Format("TCP: {0:d} {1:d} {2:d} {3:d} {4:d}", IngressPort.switch_id, receiver.frames, p.flow_ID, p.seq_num, p.enqueue_time));
                                 var expected = receiver.NextExpectedSeq;
                                 if(p.seq_num == expected) {
@@ -94,7 +94,7 @@ namespace Samples.DONSSystem
                                 //Generate ACK with seq = NextExpectedSeq
                                 var p_ack = new Packet
                                 {
-                                    l3Prot = 0xFC,
+                                    type = PacketType.ACK,//l3Prot = 0xFC,
                                     flow_ID = p.flow_ID, //sender's hostID
                                     dest_id = p.flow_ID,
                                     DSCP =1,

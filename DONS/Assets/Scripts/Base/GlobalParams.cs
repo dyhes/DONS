@@ -15,6 +15,8 @@ namespace Assets.Advanced.DONS.Base
         public static DateTime? EndBuildTime { get; set; }
         public static DateTime? EndTime { get; set; }
 
+        //public static int Host_nums { get; set; }
+
         public static void TimeOutputLog()
         {
             if (StartTime == null || AuthoringEndTime == null || StartBuildTime == null || EndBuildTime == null || StartTime == null || EndTime == null)

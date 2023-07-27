@@ -11,44 +11,7 @@ using Assets.Advanced.DONS.Base;
 namespace Samples.DONSSystem
 {
   
-    public struct NodeEntity : IComponentData
-    {
-        public int node_id;
-    }
-    public struct SwitchData : IComponentData
-    {
-        public int switch_id;
-        public int host_node;
-        public int fattree_K;
-    }
-
-    public struct QueueEntry : IBufferElementData
-    {
-        public int node_id;
-    }
-    public struct NodeEntry : IBufferElementData
-    {
-        public int dis;
-        public int vis;
-    }
-    public struct Array2D : IBufferElementData
-    {
-        public int next_id;
-    }
-    public struct AdjacencyListEntry : IBufferElementData
-    {
-        public int next_id;
-    }
-    public struct EgressPortEntry : IBufferElementData
-    {
-        public int EgressPort_id;
-        public Entity peer;
-    }
-
-    public struct BuildTopoOverFlag : IComponentData
-    {
-
-    }
+    
 
     [UpdateInGroup(typeof(Initialization_BuildTopoGroup), OrderFirst = true)]
     //[UpdateBefore(typeof(ForwardSystem))]
@@ -272,12 +235,37 @@ namespace Samples.DONSSystem
                             {
                                 var swEntity = ecb.CreateEntity();
                                 int node_id = i + build.host_node;
+                                ecb.AddBuffer<LSAPacket>(swEntity);
                                 ecb.AddComponent(swEntity, new SwitchData
                                 {
                                     switch_id = node_id,
                                     host_node = build.host_node,
                                     fattree_K = build.fattree_K,
-                                });
+                                    isUpdating = false
+                                }) ;
+                                var routing_table = ecb.AddBuffer<RoutingEntry>(swEntity);
+                                for (int j = 0; j < build.host_node + build.switch_node; j++)
+                                {
+                                    routing_table.Add(new RoutingEntry
+                                    {
+                                        dest_id = j,
+                                        next_hop = -1,
+                                        distance = -1,
+                                        isExpired = true
+                                    });
+                                }
+                                var adjacencies = ecb.AddBuffer<AdjacencyEntry>(swEntity);
+                                for (int j = 0; j < build.fattree_K; j++)
+                                {
+                                    int dst_id = ad_list2[node_id * build.fattree_K + j].next_id;
+                                    if (dst_id == -1) break;
+                                    adjacencies.Add(new AdjacencyEntry
+                                    {
+                                        node_id = dst_id,
+                                        type = dst_id < build.host_node ? NodeType.HOST : NodeType.SWITCH,
+                                        ospfStatus = OSPFStatus.DOWN
+                                    });
+                                }
                                 ecb.AddComponent(swEntity, new FIBBuildLlag { value = 0 });
                                 var array2D2 = ecb.AddBuffer<FIBEntry>(swEntity);
                                 for (int y = 0; y < (build.host_node) * (build.fattree_K); y++)
@@ -302,8 +290,16 @@ namespace Samples.DONSSystem
                                 }
                             }
                             Debug.Log("Build Switch entities End");
-                        }
 
+                            Debug.Log("Build OSPFTransmitter entity Begin");
+                            Entity tranmitterEntity = ecb.CreateEntity();
+                            ecb.AddBuffer<LSAPacket>(tranmitterEntity);
+                            ecb.AddComponent(tranmitterEntity, new OSPFTransmitterData
+                            {
+                                tranmittingFrame = 500
+                            });
+                            Debug.Log("Build OSPFTransmitter entity End");
+                        }
                         if (switchEntities.Length == build.switch_node && EgressPortEntities.Length == 0)
                         {
                             //Debug.Log(System.DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss"));
@@ -506,12 +502,13 @@ namespace Samples.DONSSystem
             var sys2 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<SendSystem>();
             var sys3 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<ReceiverACKSystem>();
             var sys4 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<ScheduleRRSystem>();
-            sys1.Enabled = sys2.Enabled = sys3.Enabled = sys4.Enabled  = true;
-
+            var sys5 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<OSPFSystem>();
+            sys1.Enabled = sys2.Enabled = sys3.Enabled = sys4.Enabled  = sys5.Enabled = true;
+            Debug.Log("sys5 enabled!");
             if (GlobalSetting.Instance.Data.IsAutoQuit)
             {
-                var sys5 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<QuitSystem>();
-                sys5.Enabled = true;
+                var sys6 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<QuitSystem>();
+                sys6.Enabled = true;
             }
 
 

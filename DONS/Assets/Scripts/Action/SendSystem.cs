@@ -37,9 +37,17 @@ namespace Samples.DONSSystem
         public long dctcp_bytesAcked;
         public long dctcp_bytesECNMarked;
     }
+
+    public enum PacketType
+    {
+        ACK,
+        TCP,
+        LSA
+    }
     public struct Packet : IBufferElementData
     {
-        public int l3Prot;
+        //public int l3Prot;
+        public PacketType type;
         public long seq_num;
         public int flow_ID;
         public int dest_id;
@@ -50,6 +58,7 @@ namespace Samples.DONSSystem
         public long dequeue_time;  //nanosecond
         public int IP_CE;              //Congestion Experienced
         public int TCP_ECE;
+        public int content_id;
     }
 
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
@@ -80,7 +89,7 @@ namespace Samples.DONSSystem
                         //The sender's two updates as one update to perform the computation, in order to synchronize the clock with the IngressPort & EgressPort
                         var p = new Packet
                         {
-                            l3Prot = 0x06, //TCP: 0x06, UDP: 0x11
+                            type = PacketType.TCP,//l3Prot = 0x06, //TCP: 0x06, UDP: 0x11
                             flow_ID = spawner.host_id,
                             dest_id = spawner.host_node-1-spawner.host_id,//spawner.host_node-1-spawner.host_id, //test
                             DSCP = 1,
@@ -111,7 +120,6 @@ namespace Samples.DONSSystem
                                         var bytesAcked = ack_p.seq_num - spawner.snd_una;
                                         spawner.snd_una = ack_p.seq_num;
                                         spawner.cwnd += 1500;         //Additive Increase
-
                                         //DCTCP
                                         // spawner.dctcp_bytesAcked += bytesAcked;
                                         // if(ack_p.TCP_ECE == 1){
@@ -150,7 +158,8 @@ namespace Samples.DONSSystem
                                 continue;
                             }
                             //CC
-                            if(p.l3Prot == 0x06 && spawner.simulator_time - spawner.last_ACK_time > 100 * 1000){
+                            if(p.type == PacketType.TCP && spawner.simulator_time - spawner.last_ACK_time > 100 * 1000)
+                            { //p.l3Prot == 0x06
                                 //RTO timeout retransmission
                                 spawner.snd_nxt = spawner.snd_una;
                                 //Debug.Log(String.Format("RTO timeout retransmission: {0:d} {1:d}", spawner.host_id, spawner.cwnd));
@@ -159,7 +168,8 @@ namespace Samples.DONSSystem
                             if(spawner.cwnd == 0){
                                 spawner.cwnd = 1500 * 10;
                             }
-                            if(p.l3Prot == 0x06 && spawner.snd_nxt - spawner.snd_una >= spawner.cwnd) { //TCP congestion control
+                            //p.l3Prot == 0x06
+                            if (p.type == PacketType.TCP && spawner.snd_nxt - spawner.snd_una >= spawner.cwnd) { //TCP congestion control
                                 //Debug.Log(String.Format("sender cannot TX: {0:d} {1:d}", spawner.host_id, spawner.cwnd));
                                 break; //cannot TX now, waiting for the increase of cwnd
                             }
