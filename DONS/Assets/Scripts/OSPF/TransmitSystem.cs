@@ -21,10 +21,8 @@ namespace Samples.DONSSystem
         protected override void OnUpdate()
         {
             //Debug.Log(String.Format("transmit frames {0:d}", frame));
-            //Debug.Log(String.Format("transmit frames {0:d}", frame));
-            var ecb = ecbSystem.CreateCommandBuffer();
-            var ecbr = ecb.AsParallelWriter();
-            var switchEntities = GetEntityQuery(ComponentType.ReadOnly<SwitchData>()).ToEntityArray(Allocator.Temp);
+            var ecb = ecbSystem.CreateCommandBuffer().AsParallelWriter();
+            var switchEntities = GetEntityQuery(ComponentType.ReadOnly<SwitchData>()).ToEntityArray(Allocator.TempJob);
             var host_num = GetComponent<SwitchData>(switchEntities[0]).host_node;
             var fc = frame;
             Entities.ForEach((Entity transmitterEntity, int entityInQueryIndex, ref OSPFPacket ospfPacket) =>
@@ -36,9 +34,9 @@ namespace Samples.DONSSystem
                     {
                         if (ospfPacket.ospfPacketType == OSPFPacketType.HELLO)
                         {
-                            Debug.Log(String.Format("Hello from {0:d} to {1:d} is received.", ospfPacket.source_id, ospfPacket.dest_id));
-                            var transitter = ecb.CreateEntity();
-                            ecb.AddComponent<OSPFPacket>(transitter, new OSPFPacket
+                            //Debug.Log(String.Format("Hello from {0:d} to {1:d} is received.", ospfPacket.source_id, ospfPacket.dest_id));
+                            var transitter = ecb.CreateEntity(entityInQueryIndex);
+                            ecb.AddComponent<OSPFPacket>(entityInQueryIndex ,transitter, new OSPFPacket
                             {
                                 ospfPacketType = OSPFPacketType.HELLORES,
                                 transitting_frame = 0,
@@ -46,32 +44,22 @@ namespace Samples.DONSSystem
                                 dest_id = ospfPacket.source_id,
                                 ack = true
                             });
-                            Debug.Log(String.Format("HelloRes from {0:d} to {1:d} starts sending.", ospfPacket.dest_id, ospfPacket.source_id));
+                            //Debug.Log(String.Format("HelloRes from {0:d} to {1:d} starts sending.", ospfPacket.dest_id, ospfPacket.source_id));
                         }
                     }
                     else
                     {
-                        ecbr.AppendToBuffer<ReceivedPacketEntry>(entityInQueryIndex, switchEntities[ospfPacket.dest_id - host_num], new ReceivedPacketEntry
+                        //Debug.Log(String.Format("idx {0:d} limit {1:d}", ospfPacket.dest_id - host_num, switchEntities.Length));
+                        ecb.AppendToBuffer<ReceivedPacketEntry>(entityInQueryIndex, switchEntities[ospfPacket.dest_id - host_num], new ReceivedPacketEntry
                         {
                             ospfPacket = ospfPacket
-                            /*
-                             * new OSPFPacket
-                            {
-                                ospfPacketType = ospfPacket.ospfPacketType,
-                                topoEntry = ospfPacket.topoEntry,
-                                source_id = ospfPacket.source_id,
-                                dest_id = ospfPacket.dest_id,
-                                ack = ospfPacket.ack
-                            }*/
                         });
                     }
-                    //Debug.Log(String.Format("swicth id {0:d} receivedPackets {1:d}", switchData.switch_id, receivedPacketEntries.Length));
-                    //Debug.Log("before destroy");
-                    ecb.DestroyEntity(transmitterEntity);
-                    //Debug.Log("after destroy");
+                    ecb.DestroyEntity(entityInQueryIndex, transmitterEntity);
                 }
             }).ScheduleParallel();
             frame++;
+            Dependency = switchEntities.Dispose(Dependency);
             ecbSystem.AddJobHandleForProducer(Dependency);
         }
     }

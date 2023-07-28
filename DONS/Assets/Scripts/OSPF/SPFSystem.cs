@@ -27,7 +27,7 @@ namespace Samples.DONSSystem
             {
                 Debug.Log(String.Format("spf frame {0:d}", frameCount));
             }
-            if (frameCount == 3000)
+            if (frameCount == 10000)
             {
                 Entities.ForEach((Entity switchEntity, int entityInQueryIndex, ref SwitchData switchData, ref DynamicBuffer<RoutingEntry> routingEntries, ref DynamicBuffer<TopoEntry> topoEntries) =>
                 {
@@ -36,12 +36,12 @@ namespace Samples.DONSSystem
                     int n = switchData.switch_node + switchData.host_node;
                     int fatTreeK = switchData.fattree_K;
                     int source = switchData.switch_id;
-                    NativeArray<int> adjcencies = new(n * fatTreeK, Allocator.Temp);
-                    NativeArray<int> adjcencyCount = new(n, Allocator.Temp);
-                    NativeArray<int> distance = new(n, Allocator.Temp);
-                    NativeArray<int> nextHops = new(n * fatTreeK, Allocator.Temp);
-                    NativeArray<int> nextHopCount = new(n, Allocator.Temp);
-                    NativeArray<bool> included = new(n, Allocator.Temp);
+                    NativeArray<int> adjcencies = new(n * fatTreeK, Allocator.TempJob);
+                    NativeArray<int> adjcencyCount = new(n, Allocator.TempJob);
+                    NativeArray<int> distance = new(n, Allocator.TempJob);
+                    NativeArray<int> nextHops = new(n * fatTreeK, Allocator.TempJob);
+                    NativeArray<int> nextHopCount = new(n, Allocator.TempJob);
+                    NativeArray<bool> included = new(n, Allocator.TempJob);
                     for (int i = 0; i < n; i++)
                     {
                         adjcencyCount[i] = 0;
@@ -61,14 +61,14 @@ namespace Samples.DONSSystem
                         adjcencies[v2 * fatTreeK + adjcencyCount[v2]] = v1;
                         adjcencyCount[v2]++;
                     }
-                    Debug.Log(String.Format("switch {0:d} topo info", source));
+                    //Debug.Log(String.Format("switch {0:d} topo info", source));
                     for (int i = 0; i < n; i++)
                     {
-                        Debug.Log(String.Format("node {0:d} is connected with {1:d} node", i, adjcencyCount[i]));
-                        for (int j = 0; j < adjcencyCount[i]; j++)
+                        Debug.Log(String.Format("In the topo of switch {1:d} node {0:d} is connected with {2:d} node", i, source, adjcencyCount[i]));
+                        /*for (int j = 0; j < adjcencyCount[i]; j++)
                         {
                             Debug.Log(String.Format("({0:d},{1:d}) ", i, adjcencies[i * fatTreeK + j]));
-                        }
+                        }*/
                     }
                     distance[source] = 0;
                     included[source] = true;
@@ -113,7 +113,7 @@ namespace Samples.DONSSystem
                             //等价路由
                             else if (distance[adjcency] == minDis + 1)
                             {
-                                NativeArray<bool> isDuplicateNextHop = new(nextHopCount[next], Allocator.Temp);
+                                NativeArray<bool> isDuplicateNextHop = new(nextHopCount[next], Allocator.TempJob);
                                 //甄别重复的next_hop
                                 for (int k = 0; k < nextHopCount[next]; k++)
                                 {
@@ -136,6 +136,7 @@ namespace Samples.DONSSystem
                                         nextHopCount[adjcency]++;
                                     }
                                 }
+                                isDuplicateNextHop.Dispose();
                             }
                         }
                     }
@@ -159,9 +160,15 @@ namespace Samples.DONSSystem
                     for (int i = 0; i < routings.Length; i++)
                     {
                         var routingEntry = routings[i];
-                        Debug.Log(String.Format(" dest_id: {0:d}, next_hop: {1:d}, distance: {2:d} ", routingEntry.dest_id, routingEntry.next_hop, routingEntry.distance));
+                        Debug.Log(String.Format(" routingTableEntry of switch {3:d} dest_id: {0:d}, next_hop: {1:d}, distance: {2:d} ", routingEntry.dest_id, routingEntry.next_hop, routingEntry.distance, source));
                     }
                     Debug.Log("-----------------------");
+                    adjcencies.Dispose();
+                    adjcencyCount.Dispose();
+                    distance.Dispose();
+                    included.Dispose();
+                    nextHopCount.Dispose();
+                    nextHops.Dispose();
                 }).ScheduleParallel();
                 ecbSystem.AddJobHandleForProducer(Dependency);
             }

@@ -525,6 +525,10 @@ namespace Samples.DONSSystem
             var sys9 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<TransmitSystem>();
             sys1.Enabled = sys2.Enabled = sys3.Enabled = sys4.Enabled  = true;
             sys6.Enabled = sys7.Enabled = sys8.Enabled = sys9.Enabled = true;
+            //sys8.Enabled = true;
+            //sys7.Enabled = true;
+            //sys6.Enabled = true;
+            //sys9.Enabled = true;
             if (GlobalSetting.Instance.Data.IsAutoQuit)
             {
                 var sys5 = World.DefaultGameObjectInjectionWorld?.GetExistingSystem<QuitSystem>();

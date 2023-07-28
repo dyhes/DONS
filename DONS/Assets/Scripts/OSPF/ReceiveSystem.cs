@@ -19,7 +19,7 @@ namespace Samples.DONSSystem
         }
         protected override void OnUpdate()
         {
-            var ecb = ecbSystem.CreateCommandBuffer();
+            var ecb = ecbSystem.CreateCommandBuffer().AsParallelWriter();
             //Debug.Log(String.Format("receive frames {0:d}", frameCount));
             Entities.ForEach((Entity switchEntity, int entityInQueryIndex, ref SwitchData switchData,ref DynamicBuffer<AdjacencyEntry> adjacencyEntries, ref DynamicBuffer<TopoEntry> topoEntries, ref DynamicBuffer<ReceivedPacketEntry> receivedPacketEntries, ref DynamicBuffer<LSAIdentifier> lSAIdentifiers) =>
             {
@@ -33,9 +33,9 @@ namespace Samples.DONSSystem
                         //根据switch当前状态回应收到的HELLO报文
                         if (packet.ospfPacketType == OSPFPacketType.HELLO)
                         {
-                            Debug.Log(String.Format("Hello from {0:d} to {1:d} is received.", packet.source_id, packet.dest_id));
-                            var transitter = ecb.CreateEntity();
-                            ecb.AddComponent<OSPFPacket>(transitter, new OSPFPacket
+                            //Debug.Log(String.Format("Hello from {0:d} to {1:d} is received.", packet.source_id, packet.dest_id));
+                            var transitter = ecb.CreateEntity(entityInQueryIndex);
+                            ecb.AddComponent(entityInQueryIndex, transitter, new OSPFPacket
                             {
                                 ospfPacketType = OSPFPacketType.HELLORES,
                                 transitting_frame = 0,
@@ -43,11 +43,11 @@ namespace Samples.DONSSystem
                                 dest_id = packet.source_id,
                                 ack = switchData.isWorking ? true : false
                             });
-                            Debug.Log(String.Format("HelloRes from {0:d} to {1:d} starts sending.", switchData.switch_id, packet.source_id));
+                            //Debug.Log(String.Format("HelloRes from {0:d} to {1:d} starts sending.", switchData.switch_id, packet.source_id));
                         } 
                         else if (packet.ospfPacketType == OSPFPacketType.HELLORES)
                         {
-                            Debug.Log(String.Format("HelloRes from {0:d} to {1:d} is received.", packet.source_id, packet.dest_id));
+                           // Debug.Log(String.Format("HelloRes from {0:d} to switch {1:d} is received.", packet.source_id, packet.dest_id));
                             var adjcencies = adjacencyEntries.AsNativeArray();
                             for (int j = 0; j < adjcencies.Length; j++)
                             {
@@ -75,8 +75,8 @@ namespace Samples.DONSSystem
                                        for (int k = 0; k < adjcencies.Length; k++)
                                         {
                                             if (adjcencies[k].type == NodeType.HOST) continue;
-                                            var transitter = ecb.CreateEntity();
-                                            ecb.AddComponent(transitter, new OSPFPacket
+                                            var transitter = ecb.CreateEntity(entityInQueryIndex);
+                                            ecb.AddComponent(entityInQueryIndex, transitter, new OSPFPacket
                                             {
                                                 ospfPacketType = OSPFPacketType.LSA,
                                                 source_id = switchData.switch_id,
@@ -138,7 +138,7 @@ namespace Samples.DONSSystem
                             }
                             if (shouldPassOn)
                             {
-                                if (packet.topoEntry.isValid && packet.dest_id == 2)
+                                if (packet.topoEntry.isValid)
                                 {
                                     //Debug.Log(String.Format("switch {0:d} is informed that LinkEntry (lid {1:d}, gid {2:d}, identifier {3:d}) transited to a valid state.", packet.dest_id, packet.topoEntry.vertexl_id, packet.topoEntry.vertexg_id, packet.topoEntry.identifier));
                                 } else
@@ -149,8 +149,8 @@ namespace Samples.DONSSystem
                                 for (int k = 0; k < adjcencies.Length; k++)
                                 {
                                     if (adjcencies[k].type == NodeType.HOST) continue;
-                                    var transitter = ecb.CreateEntity();
-                                    ecb.AddComponent(transitter, new OSPFPacket
+                                    var transitter = ecb.CreateEntity(entityInQueryIndex);
+                                    ecb.AddComponent(entityInQueryIndex, transitter, new OSPFPacket
                                     {
                                         ospfPacketType = OSPFPacketType.LSA,
                                         source_id = packet.source_id,
